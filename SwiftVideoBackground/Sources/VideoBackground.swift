@@ -214,7 +214,7 @@ public class VideoBackground {
         return UIImage(cgImage: thumbnailImage)
     }
 
-    private func cleanUp() {
+    public func cleanUp() {
         playerLayer.player?.pause()
         playerLayer.removeFromSuperlayer()
         darknessOverlayView.removeFromSuperview()
