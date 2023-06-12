@@ -49,6 +49,8 @@ public class VideoBackground {
 
     private var applicationWillEnterForegroundObserver: NSObjectProtocol?
 
+    private var applicationDidEnterBackgroundObserver: NSObjectProtocol?
+
     private var playerItemDidPlayToEndObserver: NSObjectProtocol?
 
     private var viewBoundsObserver: NSKeyValueObservation?
@@ -56,13 +58,23 @@ public class VideoBackground {
     /// You only need to initialize your own instance of `VideoBackground` if you are playing multiple videos on
     /// multiple `UIViews`. Otherwise just use the `shared` singleton.
     public init() {
-        // Resume video when application re-enters foreground
+        // Resume video when application re-enters foreground and loop if needed
         applicationWillEnterForegroundObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
             object: nil,
             queue: .main) { [weak self] _ in
+                self?.loopVideoIfNeeded()
                 self?.playerLayer.player?.play()
-        }
+            }
+        // Remove the loop when the application goes into the background
+        applicationDidEnterBackgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main) { [weak self] _ in
+                if let playerItemDidPlayToEndObserver = self?.playerItemDidPlayToEndObserver {
+                    NotificationCenter.default.removeObserver(playerItemDidPlayToEndObserver)
+                }
+            }
     }
 
     /// Plays a local video.
@@ -168,6 +180,17 @@ public class VideoBackground {
         view.addSubview(darknessOverlayView)
         view.sendSubviewToBack(darknessOverlayView)
 
+        loopVideoIfNeeded()
+
+        // Adjust frames upon device rotation
+        viewBoundsObserver = view.layer.observe(\.bounds) { [weak self] view, _ in
+            DispatchQueue.main.async {
+                self?.playerLayer.frame = view.bounds
+            }
+        }
+    }
+
+    private func loopVideoIfNeeded() {
         // Restart video when it ends
         playerItemDidPlayToEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
@@ -176,14 +199,7 @@ public class VideoBackground {
                 if let willLoopVideo = self?.willLoopVideo, willLoopVideo {
                     self?.restart()
                 }
-        }
-
-        // Adjust frames upon device rotation
-        viewBoundsObserver = view.layer.observe(\.bounds) { [weak self] view, _ in
-            DispatchQueue.main.async {
-                self?.playerLayer.frame = view.bounds
             }
-        }
     }
 
     /// Pauses the video.
@@ -214,7 +230,7 @@ public class VideoBackground {
         return UIImage(cgImage: thumbnailImage)
     }
 
-    public func cleanUp() {
+    private func cleanUp() {
         playerLayer.player?.pause()
         playerLayer.removeFromSuperlayer()
         darknessOverlayView.removeFromSuperview()
@@ -228,6 +244,9 @@ public class VideoBackground {
         cleanUp()
         if let applicationWillEnterForegroundObserver = applicationWillEnterForegroundObserver {
             NotificationCenter.default.removeObserver(applicationWillEnterForegroundObserver)
+        }
+        if let applicationDidEnterBackgroundObserver {
+            NotificationCenter.default.removeObserver(applicationDidEnterBackgroundObserver)
         }
     }
 }
